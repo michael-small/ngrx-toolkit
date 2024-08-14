@@ -24,11 +24,12 @@ import {
   removeEntity,
 } from '@ngrx/signals/entities';
 import { EntityState, NamedEntityComputed } from './shared/signal-store-models';
+import { Observable } from 'rxjs';
 
 export type Filter = Record<string, unknown>;
 export type Entity = { id: EntityId };
 
-export interface DataService<E extends Entity, F extends Filter> {
+interface _DataServicePromises<E extends Entity, F extends Filter> {
   load(filter: F): Promise<E[]>;
 
   loadById(id: EntityId): Promise<E>;
@@ -41,6 +42,24 @@ export interface DataService<E extends Entity, F extends Filter> {
 
   delete(entity: E): Promise<void>;
 }
+
+interface _DataServiceRXJS<E extends Entity, F extends Filter> {
+  load(filter: F): Observable<E[]>;
+
+  loadById(id: EntityId): Observable<E>;
+
+  create(entity: E): Observable<E>;
+
+  update(entity: E): Observable<E>;
+
+  updateAll(entity: E[]): Observable<E[]>;
+
+  delete(entity: E): Observable<void>;
+}
+
+export type DataService<E extends Entity, F extends Filter> =
+  | _DataServicePromises<E, F>
+  | _DataServiceRXJS<E, F>;
 
 export function capitalize(str: string): string {
   return str ? str[0].toUpperCase() + str.substring(1) : str;
@@ -148,7 +167,7 @@ export type NamedDataServiceComputed<
   [K in Collection as `selected${Capitalize<K>}Entities`]: Signal<E[]>;
 };
 
-export type NamedDataServiceMethods<
+type _NamedDataServiceMethodsPromises<
   E extends Entity,
   F extends Filter,
   Collection extends string
@@ -179,7 +198,52 @@ export type NamedDataServiceMethods<
   [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => Promise<void>;
 };
 
-export type DataServiceMethods<E extends Entity, F extends Filter> = {
+type _NamedDataServiceMethodsRXJS<
+  E extends Entity,
+  F extends Filter,
+  Collection extends string
+> = {
+  [K in Collection as `update${Capitalize<K>}Filter`]: (filter: F) => void;
+} & {
+  [K in Collection as `updateSelected${Capitalize<K>}Entities`]: (
+    id: EntityId,
+    selected: boolean
+  ) => void;
+} & {
+  [K in Collection as `load${Capitalize<K>}Entities`]: () => Observable<void>;
+} & {
+  [K in Collection as `setCurrent${Capitalize<K>}`]: (entity: E) => void;
+} & {
+  [K in Collection as `load${Capitalize<K>}ById`]: (
+    id: EntityId
+  ) => Observable<void>;
+} & {
+  [K in Collection as `create${Capitalize<K>}`]: (
+    entity: E
+  ) => Observable<void>;
+} & {
+  [K in Collection as `update${Capitalize<K>}`]: (
+    entity: E
+  ) => Observable<void>;
+} & {
+  [K in Collection as `updateAll${Capitalize<K>}`]: (
+    entity: E[]
+  ) => Observable<void>;
+} & {
+  [K in Collection as `delete${Capitalize<K>}`]: (
+    entity: E
+  ) => Observable<void>;
+};
+
+export type NamedDataServiceMethods<
+  E extends Entity,
+  F extends Filter,
+  Collection extends string
+> =
+  | _NamedDataServiceMethodsPromises<E, F, Collection>
+  | _NamedDataServiceMethodsRXJS<E, F, Collection>;
+
+type _DataServiceMethodsPromises<E extends Entity, F extends Filter> = {
   updateFilter: (filter: F) => void;
   updateSelected: (id: EntityId, selected: boolean) => void;
   load: () => Promise<void>;
@@ -191,6 +255,23 @@ export type DataServiceMethods<E extends Entity, F extends Filter> = {
   updateAll(entities: E[]): Promise<void>;
   delete(entity: E): Promise<void>;
 };
+
+type _DataServiceMethodsRXJS<E extends Entity, F extends Filter> = {
+  updateFilter: (filter: F) => void;
+  updateSelected: (id: EntityId, selected: boolean) => void;
+  load: () => Observable<void>;
+
+  setCurrent(entity: E): void;
+  loadById(id: EntityId): Observable<void>;
+  create(entity: E): Observable<void>;
+  update(entity: E): Observable<void>;
+  updateAll(entities: E[]): Observable<void>;
+  delete(entity: E): Observable<void>;
+};
+
+export type DataServiceMethods<E extends Entity, F extends Filter> =
+  | _DataServiceMethodsPromises<E, F>
+  | _DataServiceMethodsRXJS<E, F>;
 
 export function withDataService<
   E extends Entity,
@@ -222,6 +303,31 @@ export function withDataService<E extends Entity, F extends Filter>(options: {
     methods: DataServiceMethods<E, F>;
   }
 >;
+
+// My approach #1 - making types out of a union of Promises or RXJS implementations
+//     What I think I have done properly...
+//
+//     This concerns the
+//         - Main interface DataService
+//         - Helper types
+//             - NamedDataServiceMethods
+//             - DataServiceMethods
+//
+// Example:
+// interface _DataServicePromises<E extends Entity, F extends Filter> {
+//   load(filter: F): Promise<E[]>;
+// }
+// interface _DataServiceRXJS<E extends Entity, F extends Filter> {
+//   load(filter: F): Observable<E[]>;
+// }
+// export type DataService<E extends Entity, F extends Filter> =
+//   | _DataServicePromises<E, F>
+//   | _DataServiceRXJS<E, F>;
+//
+// Outstanding work - handle each method implementation respectively by each union member type (promise or observable)
+//     I am not sure if this is strictly speaking possible to do in the actual implementing signature for `withDataService`
+//     This I think may be tricky... I am not very good at type narrowing and conditional logic by type. We will see.
+// If this approach #1 doesn't work, my next intuition is to perhaps try some overloading tricks. But I am even less sure about overloading in general...
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withDataService<
