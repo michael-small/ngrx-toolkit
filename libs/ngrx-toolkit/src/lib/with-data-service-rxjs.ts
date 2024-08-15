@@ -209,7 +209,7 @@ export type DataServiceMethods<E extends Entity, F extends Filter> = {
   delete(entity: E): Observable<void>;
 };
 
-export function withDataService<
+export function withDataServiceRXJS<
   E extends Entity,
   F extends Filter,
   Collection extends string
@@ -228,7 +228,10 @@ export function withDataService<
     methods: NamedDataServiceMethods<E, F, Collection>;
   }
 >;
-export function withDataService<E extends Entity, F extends Filter>(options: {
+export function withDataServiceRXJS<
+  E extends Entity,
+  F extends Filter
+>(options: {
   dataServiceType: ProviderToken<DataService<E, F>>;
   filter: F;
 }): SignalStoreFeature<
@@ -241,7 +244,7 @@ export function withDataService<E extends Entity, F extends Filter>(options: {
 >;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function withDataService<
+export function withDataServiceRXJS<
   E extends Entity,
   F extends Filter,
   Collection extends string

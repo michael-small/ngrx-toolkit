@@ -4,7 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FlightCardComponent } from '../shared/flight-card.component';
-import { SimpleFlightBookingStore } from './flight-booking-simple.store';
+import {
+  SimpleFlightBookingStore,
+  SimpleFlightBookingStorePromises,
+  SimpleFlightBookingStoreRXJS,
+} from './flight-booking-simple.store';
 import { MatTableModule } from '@angular/material/table';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -24,7 +28,7 @@ import { MatButtonModule } from '@angular/material/button';
     MatInputModule,
     MatButtonModule,
 
-    RouterLink
+    RouterLink,
   ],
   selector: 'demo-flight-search',
   templateUrl: './flight-search-simple.component.html',
@@ -32,6 +36,8 @@ import { MatButtonModule } from '@angular/material/button';
 })
 export class FlightSearchSimpleComponent {
   private store = inject(SimpleFlightBookingStore);
+  private storePromise = inject(SimpleFlightBookingStorePromises);
+  private storeRXJS = inject(SimpleFlightBookingStoreRXJS);
 
   from = this.store.filter.from;
   to = this.store.filter.to;
@@ -56,6 +62,12 @@ export class FlightSearchSimpleComponent {
     this.store.redo();
   }
 
+  delete(): void {
+    this.store.delete(this.store.entities()[0]);
+    this.storePromise.delete(this.store.entities()[0]);
+    this.storeRXJS.delete(this.store.entities()[0]);
+  }
+
   updateCriteria(from: string, to: string): void {
     this.store.updateFilter({ from, to });
   }
@@ -63,5 +75,4 @@ export class FlightSearchSimpleComponent {
   updateBasket(id: number, selected: boolean): void {
     this.store.updateSelected(id, selected);
   }
-
 }

@@ -192,7 +192,7 @@ export type DataServiceMethods<E extends Entity, F extends Filter> = {
   delete(entity: E): Promise<void>;
 };
 
-export function withDataService<
+export function withDataServicePromises<
   E extends Entity,
   F extends Filter,
   Collection extends string
@@ -211,7 +211,10 @@ export function withDataService<
     methods: NamedDataServiceMethods<E, F, Collection>;
   }
 >;
-export function withDataService<E extends Entity, F extends Filter>(options: {
+export function withDataServicePromises<
+  E extends Entity,
+  F extends Filter
+>(options: {
   dataServiceType: ProviderToken<DataService<E, F>>;
   filter: F;
 }): SignalStoreFeature<
@@ -224,7 +227,7 @@ export function withDataService<E extends Entity, F extends Filter>(options: {
 >;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function withDataService<
+export function withDataServicePromises<
   E extends Entity,
   F extends Filter,
   Collection extends string
@@ -277,23 +280,7 @@ export function withDataService<
         const dataService = inject(dataServiceType);
         return {
           [deleteKey]: async (entity: E): Promise<void> => {
-            patchState(store, { [currentKey]: entity });
-            store[callStateKey] && patchState(store, setLoading(prefix));
-
-            try {
-              await dataService.delete(entity);
-              patchState(store, { [currentKey]: undefined });
-              patchState(
-                store,
-                prefix
-                  ? removeEntity(entity.id, { collection: prefix })
-                  : removeEntity(entity.id)
-              );
-              store[callStateKey] && patchState(store, setLoaded(prefix));
-            } catch (e) {
-              store[callStateKey] && patchState(store, setError(e, prefix));
-              throw e;
-            }
+            await dataService.delete(entity);
           },
         };
       }
