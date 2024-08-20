@@ -24,22 +24,29 @@ import {
   removeEntity,
 } from '@ngrx/signals/entities';
 import { EntityState, NamedEntityComputed } from './shared/signal-store-models';
+import { Observable } from 'rxjs';
 
 export type Filter = Record<string, unknown>;
 export type Entity = { id: EntityId };
 
-export interface DataService<E extends Entity, F extends Filter> {
-  load(filter: F): Promise<E[]>;
+export interface DataService<
+  E extends Entity,
+  F extends Filter,
+  ArrEntityData = Promise<E[]> | Observable<E[]>,
+  SingleEntityData = Promise<E> | Observable<E>,
+  VoidEntityData = Promise<void> | Observable<void>>
+{
+  load(filter: F): ArrEntityData;
 
-  loadById(id: EntityId): Promise<E>;
+  loadById(id: EntityId): SingleEntityData;
 
-  create(entity: E): Promise<E>;
+  create(entity: E): SingleEntityData;
 
-  update(entity: E): Promise<E>;
+  update(entity: E): SingleEntityData;
 
-  updateAll(entity: E[]): Promise<E[]>;
+  updateAll(entity: E[]): ArrEntityData;
 
-  delete(entity: E): Promise<void>;
+  delete(entity: E): VoidEntityData ;
 }
 
 export function capitalize(str: string): string {
@@ -151,7 +158,8 @@ export type NamedDataServiceComputed<
 export type NamedDataServiceMethods<
   E extends Entity,
   F extends Filter,
-  Collection extends string
+  Collection extends string,
+  VoidEntityData = Promise<void> | Observable<void>
 > = {
   [K in Collection as `update${Capitalize<K>}Filter`]: (filter: F) => void;
 } & {
@@ -160,36 +168,36 @@ export type NamedDataServiceMethods<
     selected: boolean
   ) => void;
 } & {
-  [K in Collection as `load${Capitalize<K>}Entities`]: () => Promise<void>;
+  [K in Collection as `load${Capitalize<K>}Entities`]: () => VoidEntityData;
 } & {
   [K in Collection as `setCurrent${Capitalize<K>}`]: (entity: E) => void;
 } & {
   [K in Collection as `load${Capitalize<K>}ById`]: (
     id: EntityId
-  ) => Promise<void>;
+  ) => VoidEntityData;
 } & {
-  [K in Collection as `create${Capitalize<K>}`]: (entity: E) => Promise<void>;
+  [K in Collection as `create${Capitalize<K>}`]: (entity: E) => VoidEntityData;
 } & {
-  [K in Collection as `update${Capitalize<K>}`]: (entity: E) => Promise<void>;
+  [K in Collection as `update${Capitalize<K>}`]: (entity: E) => VoidEntityData;
 } & {
   [K in Collection as `updateAll${Capitalize<K>}`]: (
     entity: E[]
-  ) => Promise<void>;
+  ) => VoidEntityData;
 } & {
-  [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => Promise<void>;
+  [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => VoidEntityData;
 };
 
-export type DataServiceMethods<E extends Entity, F extends Filter> = {
+export type DataServiceMethods<E extends Entity, F extends Filter, VoidEntityData = Promise<void> | Observable<void>> = {
   updateFilter: (filter: F) => void;
   updateSelected: (id: EntityId, selected: boolean) => void;
-  load: () => Promise<void>;
+  load: () => VoidEntityData;
 
   setCurrent(entity: E): void;
-  loadById(id: EntityId): Promise<void>;
-  create(entity: E): Promise<void>;
-  update(entity: E): Promise<void>;
-  updateAll(entities: E[]): Promise<void>;
-  delete(entity: E): Promise<void>;
+  loadById(id: EntityId): VoidEntityData;
+  create(entity: E): VoidEntityData;
+  update(entity: E): VoidEntityData;
+  updateAll(entities: E[]):VoidEntityData;
+  delete(entity: E): VoidEntityData;
 };
 
 export function withDataService<
@@ -223,6 +231,7 @@ export function withDataService<E extends Entity, F extends Filter>(options: {
   }
 >;
 
+// TODO - update these actual implementations to not just be promises
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withDataService<
   E extends Entity,
@@ -292,6 +301,7 @@ export function withDataService<
             store[callStateKey] && patchState(store, setLoading(prefix));
 
             try {
+              const g = dataService.load(filter())
               const result = await dataService.load(filter());
               patchState(
                 store,
