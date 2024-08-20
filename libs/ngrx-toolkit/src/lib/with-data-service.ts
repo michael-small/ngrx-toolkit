@@ -24,29 +24,31 @@ import {
   removeEntity,
 } from '@ngrx/signals/entities';
 import { EntityState, NamedEntityComputed } from './shared/signal-store-models';
-import { Observable } from 'rxjs';
+import { exhaustMap, Observable, pipe, tap } from 'rxjs';
+import {rxMethod} from "@ngrx/signals/rxjs-interop";
+import {tapResponse} from "@ngrx/operators";
+import {HttpErrorResponse} from "@angular/common/http";
 
 export type Filter = Record<string, unknown>;
 export type Entity = { id: EntityId };
 
+type PromiseOrObservable<Entity> = Promise<Entity> | Observable<Entity>;
+
 export interface DataService<
-  E extends Entity,
-  F extends Filter,
-  ArrEntityData = Promise<E[]> | Observable<E[]>,
-  SingleEntityData = Promise<E> | Observable<E>,
-  VoidEntityData = Promise<void> | Observable<void>>
+E extends Entity,
+F extends Filter>
 {
-  load(filter: F): ArrEntityData;
+  load(filter: F): PromiseOrObservable<Entity[]>;
 
-  loadById(id: EntityId): SingleEntityData;
+  loadById(id: EntityId): PromiseOrObservable<Entity>;
 
-  create(entity: E): SingleEntityData;
+  create(entity: E): PromiseOrObservable<Entity>;
 
-  update(entity: E): SingleEntityData;
+  update(entity: E): PromiseOrObservable<Entity>;
 
-  updateAll(entity: E[]): ArrEntityData;
+  updateAll(entity: E[]): PromiseOrObservable<Entity[]>;
 
-  delete(entity: E): VoidEntityData ;
+  delete(entity: E): PromiseOrObservable<void> ;
 }
 
 export function capitalize(str: string): string {
@@ -159,7 +161,6 @@ export type NamedDataServiceMethods<
   E extends Entity,
   F extends Filter,
   Collection extends string,
-  VoidEntityData = Promise<void> | Observable<void>
 > = {
   [K in Collection as `update${Capitalize<K>}Filter`]: (filter: F) => void;
 } & {
@@ -168,36 +169,36 @@ export type NamedDataServiceMethods<
     selected: boolean
   ) => void;
 } & {
-  [K in Collection as `load${Capitalize<K>}Entities`]: () => VoidEntityData;
+  [K in Collection as `load${Capitalize<K>}Entities`]: () => PromiseOrObservable<Entity>;
 } & {
   [K in Collection as `setCurrent${Capitalize<K>}`]: (entity: E) => void;
 } & {
   [K in Collection as `load${Capitalize<K>}ById`]: (
     id: EntityId
-  ) => VoidEntityData;
+  ) => PromiseOrObservable<Entity>;
 } & {
-  [K in Collection as `create${Capitalize<K>}`]: (entity: E) => VoidEntityData;
+  [K in Collection as `create${Capitalize<K>}`]: (entity: E) => PromiseOrObservable<Entity>;
 } & {
-  [K in Collection as `update${Capitalize<K>}`]: (entity: E) => VoidEntityData;
+  [K in Collection as `update${Capitalize<K>}`]: (entity: E) => PromiseOrObservable<Entity>;
 } & {
   [K in Collection as `updateAll${Capitalize<K>}`]: (
     entity: E[]
-  ) => VoidEntityData;
+  ) => PromiseOrObservable<Entity>;
 } & {
-  [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => VoidEntityData;
+  [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => PromiseOrObservable<Entity>;
 };
 
-export type DataServiceMethods<E extends Entity, F extends Filter, VoidEntityData = Promise<void> | Observable<void>> = {
+export type DataServiceMethods<E extends Entity, F extends Filter> = {
   updateFilter: (filter: F) => void;
   updateSelected: (id: EntityId, selected: boolean) => void;
-  load: () => VoidEntityData;
+  load: () => PromiseOrObservable<Entity>;
 
   setCurrent(entity: E): void;
-  loadById(id: EntityId): VoidEntityData;
-  create(entity: E): VoidEntityData;
-  update(entity: E): VoidEntityData;
-  updateAll(entities: E[]):VoidEntityData;
-  delete(entity: E): VoidEntityData;
+  loadById(id: EntityId): PromiseOrObservable<Entity>;
+  create(entity: E): PromiseOrObservable<Entity>;
+  update(entity: E): PromiseOrObservable<Entity>;
+  updateAll(entities: E[]):PromiseOrObservable<Entity>;
+  delete(entity: E): PromiseOrObservable<Entity>;
 };
 
 export function withDataService<
@@ -411,6 +412,31 @@ export function withDataService<
               throw e;
             }
           },
+          [deleteKey]: rxMethod<E>(
+            pipe(
+              tap((entity) => {
+                patchState(store, { [currentKey]: entity });
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entity) => {
+                return dataService.delete(entity).pipe(
+                  tapResponse(
+                    (() => {
+                      patchState(store, { [currentKey]: undefined });
+                      patchState(
+                        store,
+                        prefix
+                          ? removeEntity(entity.id, { collection: prefix })
+                          : removeEntity(entity.id)
+                      );
+                      store[callStateKey] && patchState(store, setLoaded(prefix));
+                    }),
+                    (error: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(error, prefix)),
+                  )
+                )
+              })
+            )
+          )
         };
       }
     )
