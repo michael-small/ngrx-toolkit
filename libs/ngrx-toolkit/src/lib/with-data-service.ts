@@ -369,6 +369,9 @@ export function withDataService<
             )
 
             if (id instanceof Observable || isSignal(id)) {
+              // TODO
+              // Presumably, this is what you would do since rxMethod can take these but promises cannot, or at least without re-inventing similar logic for promises.
+              // However, I don't think we can be sure of this, unless the interface somehow guards against this... can this inner block reject promises?
               return rxExecution(id)
             } else {
               const loadCall = dataService.loadById(id);
