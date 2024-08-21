@@ -24,7 +24,7 @@ import {
   removeEntity,
 } from '@ngrx/signals/entities';
 import { EntityState, NamedEntityComputed } from './shared/signal-store-models';
-import { exhaustMap, Observable, pipe, tap } from 'rxjs';
+import { exhaustMap, Observable, pipe, tap, Unsubscribable } from 'rxjs';
 import {rxMethod} from "@ngrx/signals/rxjs-interop";
 import {tapResponse} from "@ngrx/operators";
 import {HttpErrorResponse} from "@angular/common/http";
@@ -32,7 +32,15 @@ import {HttpErrorResponse} from "@angular/common/http";
 export type Filter = Record<string, unknown>;
 export type Entity = { id: EntityId };
 
+function isPromise<T>(value: PromiseOrObservable<T>): value is Promise<T> {
+  return value && typeof (value as Promise<T>).then === 'function';
+}
+function isObservable<T>(value: PromiseOrObservable<T>): value is Observable<T> {
+  return value && typeof (value as Observable<T>).subscribe === 'function';
+}
+
 type PromiseOrObservable<Entity> = Promise<Entity> | Observable<Entity>;
+type PromiseOrUnsubscribable<Entity> = Promise<Entity> | Unsubscribable;
 
 export interface DataService<
 E extends Entity,
@@ -169,23 +177,23 @@ export type NamedDataServiceMethods<
     selected: boolean
   ) => void;
 } & {
-  [K in Collection as `load${Capitalize<K>}Entities`]: () => PromiseOrObservable<Entity>;
+  [K in Collection as `load${Capitalize<K>}Entities`]: () => PromiseOrUnsubscribable<Entity>;
 } & {
   [K in Collection as `setCurrent${Capitalize<K>}`]: (entity: E) => void;
 } & {
   [K in Collection as `load${Capitalize<K>}ById`]: (
     id: EntityId
-  ) => PromiseOrObservable<Entity>;
+  ) => PromiseOrUnsubscribable<Entity>;
 } & {
-  [K in Collection as `create${Capitalize<K>}`]: (entity: E) => PromiseOrObservable<Entity>;
+  [K in Collection as `create${Capitalize<K>}`]: (entity: E) => PromiseOrUnsubscribable<Entity>;
 } & {
-  [K in Collection as `update${Capitalize<K>}`]: (entity: E) => PromiseOrObservable<Entity>;
+  [K in Collection as `update${Capitalize<K>}`]: (entity: E) => PromiseOrUnsubscribable<Entity>;
 } & {
   [K in Collection as `updateAll${Capitalize<K>}`]: (
     entity: E[]
-  ) => PromiseOrObservable<Entity>;
+  ) => PromiseOrUnsubscribable<Entity>;
 } & {
-  [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => PromiseOrObservable<Entity>;
+  [K in Collection as `delete${Capitalize<K>}`]: (entity: E) => PromiseOrUnsubscribable<Entity>;
 };
 
 export type DataServiceMethods<E extends Entity, F extends Filter> = {
@@ -285,6 +293,45 @@ export function withDataService<
     withMethods(
       (store: Record<string, unknown> & WritableStateSource<object>) => {
         const dataService = inject(dataServiceType);
+
+        const _loadById = (id: EntityId): PromiseOrUnsubscribable<void> => {
+          const loadCall = dataService.loadById(id);
+          store[callStateKey] && patchState(store, setLoading(prefix));
+
+          if (isPromise(loadCall)) {
+            const loadPromise = async (id: EntityId) => {
+              store[callStateKey] && patchState(store, setLoading(prefix));
+
+              try {
+                const current = await loadCall;
+                store[callStateKey] && patchState(store, setLoaded(prefix));
+                patchState(store, { [currentKey]: current });
+              } catch (e) {
+                store[callStateKey] && patchState(store, setError(e, prefix));
+                throw e;
+              }
+            }
+            return loadPromise(id)
+          } else {
+            return rxMethod<EntityId>(
+              pipe(
+                tap(() => {
+                  store[callStateKey] && patchState(store, setLoading(prefix));
+                }),
+                exhaustMap((id) => {
+                  return loadCall.pipe(
+                    tapResponse(
+                      (current) => {
+                        store[callStateKey] && patchState(store, setLoaded(prefix));
+                        patchState(store, { [currentKey]: current });
+                      }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
+                    )
+                  );
+                })
+              )
+            )
+          }
+        };
         return {
           [updateFilterKey]: (filter: F): void => {
             patchState(store, { [filterKey]: filter });
@@ -336,35 +383,46 @@ export function withDataService<
               throw e;
             }
           },
-          [loadByIdKey]: async (id: EntityId): Promise<void> => {
+          [loadByIdKey]: (id: EntityId) => {
+            const loadCall = dataService.loadById(id);
             store[callStateKey] && patchState(store, setLoading(prefix));
 
-            try {
-              const current = await dataService.loadById(id);
-              store[callStateKey] && patchState(store, setLoaded(prefix));
-              patchState(store, { [currentKey]: current });
-            } catch (e) {
-              store[callStateKey] && patchState(store, setError(e, prefix));
-              throw e;
-            }
-          },
-          [loadByIdKey]: rxMethod<EntityId>(
-            pipe(
-              tap(() => {
-                store[callStateKey] && patchState(store, setLoading(prefix));
-              }),
-              exhaustMap((id) => {
-                return (dataService.loadById(id) as Observable<Entity>).pipe(
-                  tapResponse(
-                    (current) => {
-                      store[callStateKey] && patchState(store, setLoaded(prefix));
-                      patchState(store, { [currentKey]: current });
-                    }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
+            return (id: EntityId): PromiseOrUnsubscribable<void> => {
+              if (isPromise(loadCall)) {
+                const loadPromise = async (id: EntityId) => {
+                  store[callStateKey] && patchState(store, setLoading(prefix));
+
+                  try {
+                    const current = await loadCall;
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                    patchState(store, { [currentKey]: current });
+                  } catch (e) {
+                    store[callStateKey] && patchState(store, setError(e, prefix));
+                    throw e;
+                  }
+                }
+                return loadPromise(id)
+              } else {
+                return rxMethod<EntityId>(
+                  pipe(
+                    tap(() => {
+                      store[callStateKey] && patchState(store, setLoading(prefix));
+                    }),
+                    exhaustMap((id) => {
+                      return loadCall.pipe(
+                        tapResponse(
+                          (current) => {
+                            store[callStateKey] && patchState(store, setLoaded(prefix));
+                            patchState(store, { [currentKey]: current });
+                          }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
+                        )
+                      );
+                    })
                   )
-                );
-              })
-            )
-          ),
+                )
+              }
+            };
+          },
           [setCurrentKey]: (current: E): void => {
             patchState(store, { [currentKey]: current });
           },

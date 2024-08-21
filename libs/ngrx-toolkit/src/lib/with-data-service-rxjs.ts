@@ -23,7 +23,7 @@ import {
   updateEntity,
   removeEntity,
 } from '@ngrx/signals/entities';
-import { exhaustMap, Observable, pipe, tap } from 'rxjs';
+import { exhaustMap, Observable, pipe, tap, Unsubscribable } from 'rxjs';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { tapResponse } from '@ngrx/operators';
@@ -172,13 +172,13 @@ export type NamedDataServiceMethods<
     selected: boolean
   ) => void;
 } & {
-  [K in Collection as `load${Capitalize<K>}Entities`]: () => Observable<void>;
+  [K in Collection as `load${Capitalize<K>}Entities`]: () => Unsubscribable;
 } & {
   [K in Collection as `setCurrent${Capitalize<K>}`]: (entity: E) => void;
 } & {
   [K in Collection as `load${Capitalize<K>}ById`]: (
     id: EntityId
-  ) => Observable<void>;
+  ) => Unsubscribable;
 } & {
   [K in Collection as `create${Capitalize<K>}`]: (
     entity: E
@@ -203,7 +203,7 @@ export type DataServiceMethods<E extends Entity, F extends Filter> = {
   load: () => Observable<void>;
 
   setCurrent(entity: E): void;
-  loadById(id: EntityId): Observable<void>;
+  loadById(id: EntityId):Unsubscribable;
   create(entity: E): Observable<void>;
   update(entity: E): Observable<void>;
   updateAll(entities: E[]): Observable<void>;
