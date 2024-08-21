@@ -50,6 +50,12 @@ export class FlightSearchSimpleComponent {
   canUndo = this.store.canUndo;
   canRedo = this.store.canRedo;
 
+  ngOnInit() {
+    this.store.load();
+    this.storePromise.load();
+    this.storeRXJS.load();
+  }
+
   async search() {
     this.store.load();
   }
@@ -60,12 +66,6 @@ export class FlightSearchSimpleComponent {
 
   redo(): void {
     this.store.redo();
-  }
-
-  delete(): void {
-    this.store.delete(this.store.entities()[0]);
-    this.storePromise.delete(this.store.entities()[0]);
-    this.storeRXJS.delete(this.store.entities()[0]);
   }
 
   updateCriteria(from: string, to: string): void {

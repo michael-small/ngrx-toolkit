@@ -279,8 +279,130 @@ export function withDataServicePromises<
       (store: Record<string, unknown> & WritableStateSource<object>) => {
         const dataService = inject(dataServiceType);
         return {
+          [updateFilterKey]: (filter: F): void => {
+            patchState(store, { [filterKey]: filter });
+          },
+          [updateSelectedKey]: (id: EntityId, selected: boolean): void => {
+            patchState(store, (state: Record<string, unknown>) => ({
+              [selectedIdsKey]: {
+                ...(state[selectedIdsKey] as Record<EntityId, boolean>),
+                [id]: selected,
+              },
+            }));
+          },
+          [loadKey]: async (): Promise<void> => {
+            const filter = store[filterKey] as Signal<F>;
+            store[callStateKey] && patchState(store, setLoading(prefix));
+
+            try {
+              const result = await dataService.load(filter());
+              patchState(
+                store,
+                prefix
+                  ? setAllEntities(result, { collection: prefix })
+                  : setAllEntities(result)
+              );
+              store[callStateKey] && patchState(store, setLoaded(prefix));
+            } catch (e) {
+              store[callStateKey] && patchState(store, setError(e, prefix));
+              throw e;
+            }
+          },
+          [loadByIdKey]: async (id: EntityId): Promise<void> => {
+            store[callStateKey] && patchState(store, setLoading(prefix));
+
+            try {
+              const current = await dataService.loadById(id);
+              store[callStateKey] && patchState(store, setLoaded(prefix));
+              patchState(store, { [currentKey]: current });
+            } catch (e) {
+              store[callStateKey] && patchState(store, setError(e, prefix));
+              throw e;
+            }
+          },
+          [setCurrentKey]: (current: E): void => {
+            patchState(store, { [currentKey]: current });
+          },
+          [createKey]: async (entity: E): Promise<void> => {
+            patchState(store, { [currentKey]: entity });
+            store[callStateKey] && patchState(store, setLoading(prefix));
+
+            try {
+              const created = await dataService.create(entity);
+              patchState(store, { [currentKey]: created });
+              patchState(
+                store,
+                prefix
+                  ? addEntity(created, { collection: prefix })
+                  : addEntity(created)
+              );
+              store[callStateKey] && patchState(store, setLoaded(prefix));
+            } catch (e) {
+              store[callStateKey] && patchState(store, setError(e, prefix));
+              throw e;
+            }
+          },
+          [updateKey]: async (entity: E): Promise<void> => {
+            patchState(store, { [currentKey]: entity });
+            store[callStateKey] && patchState(store, setLoading(prefix));
+
+            try {
+              const updated = await dataService.update(entity);
+              patchState(store, { [currentKey]: updated });
+
+              const updateArg = {
+                id: updated.id,
+                changes: updated,
+              };
+
+              const updater = (collection: string) =>
+                updateEntity(updateArg, { collection });
+
+              patchState(
+                store,
+                prefix ? updater(prefix) : updateEntity(updateArg)
+              );
+              store[callStateKey] && patchState(store, setLoaded(prefix));
+            } catch (e) {
+              store[callStateKey] && patchState(store, setError(e, prefix));
+              throw e;
+            }
+          },
+          [updateAllKey]: async (entities: E[]): Promise<void> => {
+            store[callStateKey] && patchState(store, setLoading(prefix));
+
+            try {
+              const result = await dataService.updateAll(entities);
+              patchState(
+                store,
+                prefix
+                  ? setAllEntities(result, { collection: prefix })
+                  : setAllEntities(result)
+              );
+              store[callStateKey] && patchState(store, setLoaded(prefix));
+            } catch (e) {
+              store[callStateKey] && patchState(store, setError(e, prefix));
+              throw e;
+            }
+          },
           [deleteKey]: async (entity: E): Promise<void> => {
-            await dataService.delete(entity);
+            patchState(store, { [currentKey]: entity });
+            store[callStateKey] && patchState(store, setLoading(prefix));
+
+            try {
+              await dataService.delete(entity);
+              patchState(store, { [currentKey]: undefined });
+              patchState(
+                store,
+                prefix
+                  ? removeEntity(entity.id, { collection: prefix })
+                  : removeEntity(entity.id)
+              );
+              store[callStateKey] && patchState(store, setLoaded(prefix));
+            } catch (e) {
+              store[callStateKey] && patchState(store, setError(e, prefix));
+              throw e;
+            }
           },
         };
       }

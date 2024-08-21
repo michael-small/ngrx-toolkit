@@ -26,6 +26,7 @@ import {
 import { exhaustMap, Observable, pipe, tap } from 'rxjs';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
+import { tapResponse } from '@ngrx/operators';
 
 export type EntityState<Entity> = {
   entityMap: Record<EntityId, Entity>;
@@ -244,6 +245,7 @@ export function withDataServiceRXJS<
 >;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function withDataServiceRXJS<
   E extends Entity,
   F extends Filter,
@@ -296,6 +298,129 @@ export function withDataServiceRXJS<
       (store: Record<string, unknown> & WritableStateSource<object>) => {
         const dataService = inject(dataServiceType);
         return {
+          [updateFilterKey]: (filter: F): void => {
+            patchState(store, { [filterKey]: filter });
+          },
+          [updateSelectedKey]: (id: EntityId, selected: boolean): void => {
+            patchState(store, (state: Record<string, unknown>) => ({
+              [selectedIdsKey]: {
+                ...(state[selectedIdsKey] as Record<EntityId, boolean>),
+                [id]: selected,
+              },
+            }));
+          },
+          [loadKey]: rxMethod<void>(
+            pipe(
+              tap(() => {
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap(() => {
+                const filter = store[filterKey] as Signal<F>;
+                return dataService.load(filter()).pipe(
+                  tapResponse((result) => {
+                    patchState(
+                      store,
+                      prefix
+                        ? setAllEntities(result, { collection: prefix })
+                        : setAllEntities(result)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix)))
+                )
+              })
+            )
+          ),
+          [loadByIdKey]: rxMethod<EntityId>(
+            pipe(
+              tap(() => {
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((id) => {
+                return dataService.loadById(id).pipe(
+                  tapResponse(
+                    (current) => {
+                      store[callStateKey] && patchState(store, setLoaded(prefix));
+                      patchState(store, { [currentKey]: current });
+                    }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
+                  )
+                );
+              })
+            )
+          ),
+          [setCurrentKey]: (current: E): void => {
+            patchState(store, { [currentKey]: current });
+          },
+          [createKey]: rxMethod<E>(
+            pipe(
+              tap((entity) => {
+                patchState(store, { [currentKey]: entity });
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entity) => {
+                return dataService.create(entity).pipe(
+                  tapResponse((created) => {
+                    patchState(store, { [currentKey]: created });
+                    patchState(
+                      store,
+                      prefix
+                        ? addEntity(created, { collection: prefix })
+                        : addEntity(created)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix)))
+                )
+              })
+            )
+          ),
+          [updateKey]: rxMethod<E>(
+            pipe(
+              tap((entity) => {
+                patchState(store, { [currentKey]: entity });
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entity) => {
+                return dataService.update(entity).pipe(
+                  tapResponse((updated) => {
+                    patchState(store, { [currentKey]: updated });
+
+                    const updateArg = {
+                      id: updated.id,
+                      changes: updated,
+                    };
+
+                    const updater = (collection: string) =>
+                      updateEntity(updateArg, { collection });
+
+                    patchState(
+                      store,
+                      prefix ? updater(prefix) : updateEntity(updateArg)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (error: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(error, prefix)))
+                )
+              })
+            )
+          ),
+          [updateAllKey]: rxMethod<E[]>(
+            pipe(
+              tap(() => {
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entities) => {
+                return dataService.updateAll(entities).pipe(
+                  tapResponse((result) => {
+                    patchState(
+                      store,
+                      prefix
+                        ? setAllEntities(result, { collection: prefix })
+                        : setAllEntities(result)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (error: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(error, prefix)))
+                )
+              })
+            )
+          ),
           [deleteKey]: rxMethod<E>(
             pipe(
               tap((entity) => {
@@ -303,10 +428,24 @@ export function withDataServiceRXJS<
                 store[callStateKey] && patchState(store, setLoading(prefix));
               }),
               exhaustMap((entity) => {
-                return dataService.delete(entity).pipe();
+                return dataService.delete(entity).pipe(
+                  tapResponse(
+                    (() => {
+                      patchState(store, { [currentKey]: undefined });
+                      patchState(
+                        store,
+                        prefix
+                          ? removeEntity(entity.id, { collection: prefix })
+                          : removeEntity(entity.id)
+                      );
+                      store[callStateKey] && patchState(store, setLoaded(prefix));
+                    }),
+                    (error: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(error, prefix)),
+                  )
+                )
               })
             )
-          ),
+          )
         };
       }
     )

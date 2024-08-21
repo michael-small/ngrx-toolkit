@@ -297,13 +297,33 @@ export function withDataService<
               },
             }));
           },
+          [loadKey]: rxMethod<void>(
+            pipe(
+              tap(() => {
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap(() => {
+                const filter = store[filterKey] as Signal<F>;
+                return (dataService.load(filter()) as Observable<Entity[]>).pipe(
+                  tapResponse((result) => {
+                    patchState(
+                      store,
+                      prefix
+                        ? setAllEntities(result, { collection: prefix })
+                        : setAllEntities(result)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix)))
+                )
+              })
+            )
+          ),
           [loadKey]: async (): Promise<void> => {
             const filter = store[filterKey] as Signal<F>;
             store[callStateKey] && patchState(store, setLoading(prefix));
 
             try {
-              const g = dataService.load(filter())
-              const result = await dataService.load(filter());
+              const result = await (dataService.load(filter()) as Promise<Entity[]>);
               patchState(
                 store,
                 prefix
@@ -328,6 +348,23 @@ export function withDataService<
               throw e;
             }
           },
+          [loadByIdKey]: rxMethod<EntityId>(
+            pipe(
+              tap(() => {
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((id) => {
+                return (dataService.loadById(id) as Observable<Entity>).pipe(
+                  tapResponse(
+                    (current) => {
+                      store[callStateKey] && patchState(store, setLoaded(prefix));
+                      patchState(store, { [currentKey]: current });
+                    }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
+                  )
+                );
+              })
+            )
+          ),
           [setCurrentKey]: (current: E): void => {
             patchState(store, { [currentKey]: current });
           },
@@ -336,7 +373,7 @@ export function withDataService<
             store[callStateKey] && patchState(store, setLoading(prefix));
 
             try {
-              const created = await dataService.create(entity);
+              const created = await (dataService.create(entity) as Promise<Entity>);
               patchState(store, { [currentKey]: created });
               patchState(
                 store,
@@ -350,12 +387,34 @@ export function withDataService<
               throw e;
             }
           },
+          [createKey]: rxMethod<E>(
+            pipe(
+              tap((entity) => {
+                patchState(store, { [currentKey]: entity });
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entity) => {
+                return (dataService.create(entity) as Observable<Entity>).pipe(
+                  tapResponse((created) => {
+                    patchState(store, { [currentKey]: created });
+                    patchState(
+                      store,
+                      prefix
+                        ? addEntity(created, { collection: prefix })
+                        : addEntity(created)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix)))
+                )
+              })
+            )
+          ),
           [updateKey]: async (entity: E): Promise<void> => {
             patchState(store, { [currentKey]: entity });
             store[callStateKey] && patchState(store, setLoading(prefix));
 
             try {
-              const updated = await dataService.update(entity);
+              const updated = await (dataService.update(entity) as Promise<Entity>);
               patchState(store, { [currentKey]: updated });
 
               const updateArg = {
@@ -376,11 +435,40 @@ export function withDataService<
               throw e;
             }
           },
+          [updateKey]: rxMethod<E>(
+            pipe(
+              tap((entity) => {
+                patchState(store, { [currentKey]: entity });
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entity) => {
+                return (dataService.update(entity) as Observable<Entity>).pipe(
+                  tapResponse((updated) => {
+                    patchState(store, { [currentKey]: updated });
+
+                    const updateArg = {
+                      id: updated.id,
+                      changes: updated,
+                    };
+
+                    const updater = (collection: string) =>
+                      updateEntity(updateArg, { collection });
+
+                    patchState(
+                      store,
+                      prefix ? updater(prefix) : updateEntity(updateArg)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (error: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(error, prefix)))
+                )
+              })
+            )
+          ),
           [updateAllKey]: async (entities: E[]): Promise<void> => {
             store[callStateKey] && patchState(store, setLoading(prefix));
 
             try {
-              const result = await dataService.updateAll(entities);
+              const result = await (dataService.updateAll(entities) as Promise<Entity[]>);
               patchState(
                 store,
                 prefix
@@ -393,6 +481,26 @@ export function withDataService<
               throw e;
             }
           },
+          [updateAllKey]: rxMethod<E[]>(
+            pipe(
+              tap(() => {
+                store[callStateKey] && patchState(store, setLoading(prefix));
+              }),
+              exhaustMap((entities) => {
+                return (dataService.updateAll(entities) as Observable<Entity[]>).pipe(
+                  tapResponse((result) => {
+                    patchState(
+                      store,
+                      prefix
+                        ? setAllEntities(result, { collection: prefix })
+                        : setAllEntities(result)
+                    );
+                    store[callStateKey] && patchState(store, setLoaded(prefix));
+                  }, (error: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(error, prefix)))
+                )
+              })
+            )
+          ),
           [deleteKey]: async (entity: E): Promise<void> => {
             patchState(store, { [currentKey]: entity });
             store[callStateKey] && patchState(store, setLoading(prefix));
@@ -419,7 +527,7 @@ export function withDataService<
                 store[callStateKey] && patchState(store, setLoading(prefix));
               }),
               exhaustMap((entity) => {
-                return dataService.delete(entity).pipe(
+                return (dataService.delete(entity) as Observable<void>).pipe(
                   tapResponse(
                     (() => {
                       patchState(store, { [currentKey]: undefined });
