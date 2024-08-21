@@ -5,9 +5,10 @@ import { ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FlightCardComponent } from '../shared/flight-card.component';
 import {
+  MyStore,
   SimpleFlightBookingStore,
   SimpleFlightBookingStorePromises,
-  SimpleFlightBookingStoreRXJS,
+  SimpleFlightBookingStoreRXJS
 } from './flight-booking-simple.store';
 import { MatTableModule } from '@angular/material/table';
 import { MatInputModule } from '@angular/material/input';
@@ -38,6 +39,7 @@ export class FlightSearchSimpleComponent {
   private store = inject(SimpleFlightBookingStore);
   private storePromise = inject(SimpleFlightBookingStorePromises);
   private storeRXJS = inject(SimpleFlightBookingStoreRXJS);
+  private myRxjsStore = inject(MyStore);
 
   from = this.store.filter.from;
   to = this.store.filter.to;
@@ -51,9 +53,10 @@ export class FlightSearchSimpleComponent {
   canRedo = this.store.canRedo;
 
   ngOnInit() {
-    this.store.load();
-    this.storePromise.load();
-    this.storeRXJS.load();
+    this.store.loadById('');
+    this.storePromise.loadById('');
+    this.storeRXJS.loadById('');
+    this.myRxjsStore.inputPipe('')
   }
 
   async search() {
