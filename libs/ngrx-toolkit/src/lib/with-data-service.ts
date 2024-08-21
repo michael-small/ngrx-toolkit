@@ -38,6 +38,9 @@ function isPromise<T>(value: PromiseOrObservable<T>): value is Promise<T> {
 function isObservable<T>(value: PromiseOrObservable<T>): value is Observable<T> {
   return value && typeof (value as Observable<T>).subscribe === 'function';
 }
+function isSignal(value: any): value is Signal<any> {
+  return typeof value() === 'function';
+}
 
 type PromiseOrObservable<Entity> = Promise<Entity> | Observable<Entity>;
 type PromiseOrUnsubscribable<Entity> = Promise<Entity> | Unsubscribable;
@@ -202,7 +205,7 @@ export type DataServiceMethods<E extends Entity, F extends Filter> = {
   load: () => PromiseOrObservable<Entity>;
 
   setCurrent(entity: E): void;
-  loadById(id: EntityId): PromiseOrObservable<Entity>;
+  loadById(id: EntityId): PromiseOrUnsubscribable<Entity>;
   create(entity: E): PromiseOrObservable<Entity>;
   update(entity: E): PromiseOrObservable<Entity>;
   updateAll(entities: E[]):PromiseOrObservable<Entity>;
@@ -293,45 +296,6 @@ export function withDataService<
     withMethods(
       (store: Record<string, unknown> & WritableStateSource<object>) => {
         const dataService = inject(dataServiceType);
-
-        const _loadById = (id: EntityId): PromiseOrUnsubscribable<void> => {
-          const loadCall = dataService.loadById(id);
-          store[callStateKey] && patchState(store, setLoading(prefix));
-
-          if (isPromise(loadCall)) {
-            const loadPromise = async (id: EntityId) => {
-              store[callStateKey] && patchState(store, setLoading(prefix));
-
-              try {
-                const current = await loadCall;
-                store[callStateKey] && patchState(store, setLoaded(prefix));
-                patchState(store, { [currentKey]: current });
-              } catch (e) {
-                store[callStateKey] && patchState(store, setError(e, prefix));
-                throw e;
-              }
-            }
-            return loadPromise(id)
-          } else {
-            return rxMethod<EntityId>(
-              pipe(
-                tap(() => {
-                  store[callStateKey] && patchState(store, setLoading(prefix));
-                }),
-                exhaustMap((id) => {
-                  return loadCall.pipe(
-                    tapResponse(
-                      (current) => {
-                        store[callStateKey] && patchState(store, setLoaded(prefix));
-                        patchState(store, { [currentKey]: current });
-                      }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
-                    )
-                  );
-                })
-              )
-            )
-          }
-        };
         return {
           [updateFilterKey]: (filter: F): void => {
             patchState(store, { [filterKey]: filter });
@@ -383,11 +347,31 @@ export function withDataService<
               throw e;
             }
           },
-          [loadByIdKey]: (id: EntityId) => {
-            const loadCall = dataService.loadById(id);
+          [loadByIdKey]: (id: EntityId | Observable<EntityId> | Signal<EntityId>) => {
             store[callStateKey] && patchState(store, setLoading(prefix));
 
-            return (id: EntityId): PromiseOrUnsubscribable<void> => {
+            const rxExecution = rxMethod<EntityId>(
+              pipe(
+                tap(() => {
+                  store[callStateKey] && patchState(store, setLoading(prefix));
+                }),
+                exhaustMap((id) => {
+                  return (dataService.loadById(id) as Observable<Entity>).pipe(
+                    tapResponse(
+                      (current) => {
+                        store[callStateKey] && patchState(store, setLoaded(prefix));
+                        patchState(store, { [currentKey]: current });
+                      }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
+                    )
+                  );
+                })
+              )
+            )
+
+            if (id instanceof Observable || isSignal(id)) {
+              return rxExecution(id)
+            } else {
+              const loadCall = dataService.loadById(id);
               if (isPromise(loadCall)) {
                 const loadPromise = async (id: EntityId) => {
                   store[callStateKey] && patchState(store, setLoading(prefix));
@@ -403,25 +387,9 @@ export function withDataService<
                 }
                 return loadPromise(id)
               } else {
-                return rxMethod<EntityId>(
-                  pipe(
-                    tap(() => {
-                      store[callStateKey] && patchState(store, setLoading(prefix));
-                    }),
-                    exhaustMap((id) => {
-                      return loadCall.pipe(
-                        tapResponse(
-                          (current) => {
-                            store[callStateKey] && patchState(store, setLoaded(prefix));
-                            patchState(store, { [currentKey]: current });
-                          }, (errorResponse: HttpErrorResponse) => store[callStateKey] && patchState(store, setError(errorResponse, prefix))
-                        )
-                      );
-                    })
-                  )
-                )
+                return rxExecution(id)
               }
-            };
+            }
           },
           [setCurrentKey]: (current: E): void => {
             patchState(store, { [currentKey]: current });
