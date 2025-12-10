@@ -1,14 +1,13 @@
 export { withDisabledNameIndices } from './lib/devtools/features/with-disabled-name-indicies';
 export { withGlitchTracking } from './lib/devtools/features/with-glitch-tracking';
 export { withMapper } from './lib/devtools/features/with-mapper';
-export {
-  ReduxDevtoolsConfig,
-  provideDevtoolsConfig,
-} from './lib/devtools/provide-devtools-config';
+export { provideDevtoolsConfig } from './lib/devtools/provide-devtools-config';
+export type { ReduxDevtoolsConfig } from './lib/devtools/provide-devtools-config';
 export { renameDevtoolsName } from './lib/devtools/rename-devtools-name';
 export { patchState, updateState } from './lib/devtools/update-state';
 export { withDevToolsStub } from './lib/devtools/with-dev-tools-stub';
-export { DevtoolsFeature, withDevtools } from './lib/devtools/with-devtools';
+export { withDevtools } from './lib/devtools/with-devtools';
+export type { DevtoolsFeature } from './lib/devtools/with-devtools';
 
 export {
   createEffects,
@@ -35,10 +34,8 @@ export {
   withLocalStorage,
   withSessionStorage,
 } from './lib/storage-sync/features/with-local-storage';
-export {
-  SyncConfig,
-  withStorageSync,
-} from './lib/storage-sync/with-storage-sync';
+export { withStorageSync } from './lib/storage-sync/with-storage-sync';
+export type { SyncConfig } from './lib/storage-sync/with-storage-sync';
 export { emptyFeature, withConditional } from './lib/with-conditional';
 export { withFeatureFactory } from './lib/with-feature-factory';
 

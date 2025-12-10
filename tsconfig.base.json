@@ -2,6 +2,7 @@
   "compileOnSave": false,
   "compilerOptions": {
     "rootDir": ".",
+    "isolatedModules": true,
     "sourceMap": true,
     "declaration": false,
     "moduleResolution": "bundler",
