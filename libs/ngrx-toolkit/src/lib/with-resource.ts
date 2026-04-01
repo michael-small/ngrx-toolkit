@@ -72,10 +72,12 @@ export type ErrorHandling = 'native' | 'undefined value' | 'previous value';
 
 export type ResourceOptions = {
   errorHandling?: ErrorHandling;
+  snapshotFn?: <T>(input: Resource<T>) => Resource<T>;
 };
 
 const defaultOptions: Required<ResourceOptions> = {
   errorHandling: 'undefined value',
+  snapshotFn: (resource) => resource,
 };
 
 //** Implementation of `withResource` */
