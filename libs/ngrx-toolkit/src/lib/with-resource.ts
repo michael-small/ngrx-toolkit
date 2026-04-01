@@ -324,6 +324,21 @@ export function isResourceRef(value: unknown): value is ResourceRef<unknown> {
   );
 }
 
+export function isResource(value: unknown): value is Resource<unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'value' in value &&
+    isSignal(value.value) &&
+    'status' in value &&
+    'error' in value &&
+    'isLoading' in value &&
+    'snapshot' in value &&
+    'hasValue' in value &&
+    !('reload' in value) // TODO - enough to distinguish between `Resource` and `ResourceRef`?
+  );
+}
+
 //** Types for `mapToResource` */
 
 type NamedResource<Name extends string, T> = {
