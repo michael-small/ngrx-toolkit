@@ -77,7 +77,7 @@ export type ResourceOptions = {
 
 const defaultOptions: Required<ResourceOptions> = {
   errorHandling: 'undefined value',
-  snapshotFn: (resource) => resource,
+  snapshotFn: <T>(input: Resource<T>) => input as Resource<T>,
 };
 
 //** Implementation of `withResource` */
@@ -130,7 +130,10 @@ export function withResource<
   resourceFactory: (
     store: Input['props'] & Input['methods'] & StateSignals<Input['state']>,
   ) => ResourceRef<ResourceValue>,
-  resourceOptions: { errorHandling: 'undefined value' },
+  resourceOptions: {
+    errorHandling: 'undefined value';
+    snapshotFn?: <T>(input: Resource<T>) => Resource<T>;
+  },
 ): SignalStoreFeature<Input, ResourceResult<ResourceValue | undefined>>;
 
 export function withResource<
@@ -193,7 +196,10 @@ export function withResource<
   resourceFactory: (
     store: Input['props'] & Input['methods'] & StateSignals<Input['state']>,
   ) => Dictionary,
-  resourceOptions: { errorHandling: 'undefined value' },
+  resourceOptions: {
+    errorHandling: 'undefined value';
+    snapshotFn?: <T>(input: Resource<T>) => Resource<T>;
+  },
 ): SignalStoreFeature<Input, NamedResourceResult<Dictionary, true>>;
 
 export function withResource<
