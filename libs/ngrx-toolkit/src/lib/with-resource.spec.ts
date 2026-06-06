@@ -16,6 +16,10 @@ import {
 import { of } from 'rxjs';
 import { Assert, AssertNot, IsEqual, Satisfies } from './test-utils/types';
 import { ErrorHandling, mapToResource, withResource } from './with-resource';
+import {
+  restResourceReadable,
+  restResourceWritable,
+} from './with-resource/tests/util/custom-resource';
 import { Address, venice, vienna } from './with-resource/tests/util/fixtures';
 import { paramsForResourceTypes } from './with-resource/tests/util/params-for-resource-types';
 import { setupUnnamedResource } from './with-resource/tests/util/setup-unnamed-resource';
@@ -812,6 +816,27 @@ describe('withResource', () => {
           id: resource({ loader: () => Promise.resolve(1) }),
         })),
       );
+    });
+
+    it('can call custom named and extract extra properties', async () => {
+      const wait = (ms = 0) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+
+      const Store = signalStore(
+        { providedIn: 'root' },
+        withResource(() => ({
+          idWritable: restResourceWritable(() => 'a'),
+          idReadonly: restResourceReadable(() => 'a'),
+        })),
+      );
+      const store = TestBed.inject(Store);
+
+      await wait();
+
+      expect(store.idWritableStuff()).toBe('a stuff');
+      expect(store.idReadonlyStuff()).toBe('a stuff');
+
+      // patchState(store, { idWritableValue: 'b' });
     });
   });
 });

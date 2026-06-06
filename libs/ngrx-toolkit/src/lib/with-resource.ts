@@ -110,9 +110,15 @@ type UnnamedResourceResult<
   } & ConditionalReloadMethod<T>;
 };
 
-type WidenedResource<T> = ResourceRef<T> | Resource<T>;
+type WidenedResource<T> = ResourceRef<T> | Resource<T>; //
 
 export type ResourceDictionary = Record<string, WidenedResource<unknown>>;
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (arg: T) => void : never
+) extends (arg: infer I) => void
+  ? I
+  : never;
 
 type NamedAdditionalSignalProps<T extends ResourceDictionary> = {
   [ResourceName in keyof T & string]: {
@@ -121,7 +127,9 @@ type NamedAdditionalSignalProps<T extends ResourceDictionary> = {
       T[ResourceName]
     >[Prop];
   };
-}[keyof T & string];
+}[keyof T & string] extends infer U
+  ? UnionToIntersection<U>
+  : never;
 
 export type NamedResourceResult<
   T extends ResourceDictionary,
