@@ -21,6 +21,32 @@ import {
   withProps,
 } from '@ngrx/signals';
 
+/**
+ * `hasValue` captures the original type of `this` as `Original` and narrows
+ * only the resource portion of that type.
+ *
+ * The intersection order is significant because Signals are callable.
+ * TypeScript treats intersections of callable types as overloads and uses the
+ * first matching call signature. The narrowed resource must therefore come
+ * before `Original`; otherwise, `value()` resolves to the original
+ * `T | undefined`.
+ *
+ * ```ts
+ * type A = {
+ *   id: () => number | undefined;
+ *   hasId: <Original extends A>(
+ *     this: Original,
+ *   ) => this is { id: () => number } & Original;
+ * };
+ *
+ * function read(a: A) {
+ *   if (a.hasId()) {
+ *     const id = a.id(); // number
+ *   }
+ * }
+ * ```
+ */
+
 export type ResourceResult<T> = {
   state: { value: T };
   props: {
@@ -30,7 +56,9 @@ export type ResourceResult<T> = {
     snapshot: Signal<ResourceSnapshot<T>>;
   };
   methods: {
-    hasValue(): this is Resource<Exclude<T, undefined>>;
+    hasValue: <Original extends Resource<T>>(
+      this: Original,
+    ) => this is Resource<Exclude<T, undefined>> & Original;
   };
 };
 export type ResourceRefResult<T> = {
@@ -42,7 +70,9 @@ export type ResourceRefResult<T> = {
     snapshot: Signal<ResourceSnapshot<T>>;
   };
   methods: {
-    hasValue(): this is Resource<Exclude<T, undefined>>;
+    hasValue: <Original extends ResourceRef<T>>(
+      this: Original,
+    ) => this is ResourceRef<Exclude<T, undefined>> & Original;
     _reload(): boolean;
   };
 };

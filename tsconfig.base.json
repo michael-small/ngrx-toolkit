@@ -19,7 +19,8 @@
       "@angular-architects/ngrx-toolkit/redux-connector": [
         "libs/ngrx-toolkit/redux-connector"
       ]
-    }
+    },
+    "ignoreDeprecations": "6.0"
   },
   "exclude": ["node_modules", "tmp"]
 }
