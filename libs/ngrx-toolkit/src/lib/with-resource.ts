@@ -20,6 +20,20 @@ import {
   withMethods,
   withProps,
 } from '@ngrx/signals';
+import { extendResource } from '@ngrx/signals/resource';
+
+/**
+ * @experimental
+ * @description
+ *
+ * Mirrors `ResourceExtension` from `@ngrx/signals/resource`, so extensions
+ * such as `withPreviousValueOnLoading` or `withValueOnError` can be passed
+ * to `withResource` via the `extension` option.
+ */
+export type ResourceExtension<R extends Resource<unknown>> = {
+  type: symbol;
+  apply: (resource: R) => void;
+};
 
 /**
  * `hasValue` captures the original type of `this` as `Original` and narrows
@@ -237,13 +251,56 @@ export type NamedResourceResult<
 
 export type ErrorHandling = 'native' | 'undefined value' | 'previous value';
 
-export type ResourceOptions = {
+/**
+ * `errorHandling` is mutually exclusive with `extension`
+ */
+export type ErrorHandlingResourceOptions = {
   errorHandling?: ErrorHandling;
+  extension?: never;
 };
 
-const defaultOptions: Required<ResourceOptions> = {
-  errorHandling: 'undefined value',
+/**
+ * `extension` is mutually exclusive with `errorHandling`
+ */
+export type ExtensionResourceOptions = {
+  errorHandling?: never;
+  extension:
+    | ResourceExtension<Resource<unknown>>
+    | ResourceExtension<Resource<unknown>>[];
 };
+
+/**
+ * `extension` is mutually exclusive with `errorHandling`: when an extension
+ * is supplied, the resource's value is derived solely from the resource type
+ * produced by that extension, instead of being wrapped by `withResource`'s
+ * own error handling logic.
+ */
+export type ResourceOptions =
+  | ErrorHandlingResourceOptions
+  | ExtensionResourceOptions;
+
+const defaultErrorHandling: ErrorHandling = 'undefined value';
+
+type ResolvedResourceOptions =
+  | { kind: 'errorHandling'; errorHandling: ErrorHandling }
+  | { kind: 'extension'; extensions: ResourceExtension<Resource<unknown>>[] };
+
+function resolveResourceOptions(
+  resourceOptions?: ResourceOptions,
+): ResolvedResourceOptions {
+  if (resourceOptions?.extension) {
+    const { extension } = resourceOptions;
+    return {
+      kind: 'extension',
+      extensions: Array.isArray(extension) ? extension : [extension],
+    };
+  }
+
+  return {
+    kind: 'errorHandling',
+    errorHandling: resourceOptions?.errorHandling ?? defaultErrorHandling,
+  };
+}
 
 //** Implementation of `withResource` */
 
@@ -300,6 +357,16 @@ export function withResource<
   ) => ResourceType,
   resourceOptions: { errorHandling: 'undefined value' },
 ): SignalStoreFeature<Input, UnnamedResourceResult<ResourceType, true>>;
+
+export function withResource<
+  Input extends SignalStoreFeatureResult,
+  ResourceType extends Resource<unknown>,
+>(
+  resourceFactory: (
+    store: Input['props'] & Input['methods'] & StateSignals<Input['state']>,
+  ) => ResourceType,
+  resourceOptions: ExtensionResourceOptions,
+): SignalStoreFeature<Input, UnnamedResourceResult<ResourceType, false>>;
 
 export function withResource<
   Input extends SignalStoreFeatureResult,
@@ -375,6 +442,16 @@ export function withResource<
   resourceFactory: (
     store: Input['props'] & Input['methods'] & StateSignals<Input['state']>,
   ) => Dictionary,
+  resourceOptions: ExtensionResourceOptions,
+): SignalStoreFeature<Input, NamedResourceResult<Dictionary, false>>;
+
+export function withResource<
+  Input extends SignalStoreFeatureResult,
+  Dictionary extends ResourceDictionary,
+>(
+  resourceFactory: (
+    store: Input['props'] & Input['methods'] & StateSignals<Input['state']>,
+  ) => Dictionary,
   resourceOptions?: ResourceOptions,
 ): SignalStoreFeature<Input, NamedResourceResult<Dictionary, false>>;
 
@@ -387,10 +464,7 @@ export function withResource<
   ) => Resource<ResourceValue> | ResourceDictionary,
   resourceOptions?: ResourceOptions,
 ): SignalStoreFeature<Input> {
-  const options: Required<ResourceOptions> = {
-    ...defaultOptions,
-    ...(resourceOptions || {}),
-  };
+  const resolvedOptions = resolveResourceOptions(resourceOptions);
   return (store) => {
     const resourceOrDictionary = resourceFactory({
       ...store.stateSignals,
@@ -404,20 +478,17 @@ export function withResource<
     ) {
       return createUnnamedResource(
         resourceOrDictionary,
-        options.errorHandling,
+        resolvedOptions,
       )(store);
     } else {
-      return createNamedResource(
-        resourceOrDictionary,
-        options.errorHandling,
-      )(store);
+      return createNamedResource(resourceOrDictionary, resolvedOptions)(store);
     }
   };
 }
 
 function createUnnamedResource<ResourceValue>(
   resource: Resource<ResourceValue>,
-  errorHandling: ErrorHandling,
+  options: ResolvedResourceOptions,
 ) {
   function hasValue(): this is Resource<Exclude<ResourceValue, undefined>> {
     if (isResourceRef(resource)) {
@@ -426,6 +497,8 @@ function createUnnamedResource<ResourceValue>(
       return resource.hasValue();
     }
   }
+
+  const valueSignal = resolveValueSignal(resource, options);
 
   const metadataProps = {
     status: resource.status,
@@ -438,7 +511,7 @@ function createUnnamedResource<ResourceValue>(
   if (isResourceRef(resource)) {
     return signalStoreFeature(
       withLinkedState(() => ({
-        value: valueSignalForErrorHandling(resource, errorHandling),
+        value: valueSignal,
       })),
       withProps(() => metadataProps),
       withMethods(() => ({
@@ -450,7 +523,7 @@ function createUnnamedResource<ResourceValue>(
 
   return signalStoreFeature(
     withProps(() => ({
-      value: valueSignalForErrorHandling(resource, errorHandling),
+      value: valueSignal,
       ...metadataProps,
     })),
     withMethods(() => ({ hasValue })),
@@ -459,7 +532,7 @@ function createUnnamedResource<ResourceValue>(
 
 function createNamedResource<Dictionary extends ResourceDictionary>(
   dictionary: Dictionary,
-  errorHandling: ErrorHandling,
+  options: ResolvedResourceOptions,
 ) {
   const keys = Object.keys(dictionary);
 
@@ -480,16 +553,13 @@ function createNamedResource<Dictionary extends ResourceDictionary>(
       : () => res.hasValue();
 
     if (isResourceRef(res)) {
-      state[`${resourceName}Value`] = valueSignalForErrorHandling(
+      state[`${resourceName}Value`] = resolveValueSignal(
         res,
-        errorHandling,
+        options,
       ) as WritableSignal<unknown>;
       methods[`_${resourceName}Reload`] = () => res.reload();
     } else {
-      props[`${resourceName}Value`] = valueSignalForErrorHandling(
-        res,
-        errorHandling,
-      );
+      props[`${resourceName}Value`] = resolveValueSignal(res, options);
     }
   }
 
@@ -730,6 +800,21 @@ export function mapToResource<
  * The decision was made to use the proxy approach, because it is temporary and will not be
  * a breaking change.
  */
+
+// When `extension` is used, the value is taken as-is from the extended resource,
+// bypassing `withResource`'s own error handling logic entirely.
+function resolveValueSignal<T>(
+  resource: Resource<T>,
+  options: ResolvedResourceOptions,
+): Signal<T | undefined> {
+  if (options.kind === 'extension') {
+    extendResource(resource, ...options.extensions);
+    return resource.value;
+  }
+
+  return valueSignalForErrorHandling(resource, options.errorHandling);
+}
+
 function valueSignalForErrorHandling<T>(
   res: Resource<T>,
   errorHandling: 'undefined value',

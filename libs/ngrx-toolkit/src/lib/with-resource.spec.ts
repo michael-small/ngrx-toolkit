@@ -31,10 +31,7 @@ import { paramsForResourceTypes } from './with-resource/tests/util/params-for-re
 import { setupUnnamedResource } from './with-resource/tests/util/setup-unnamed-resource';
 import { withPreviousValue } from './with-resource/tests/util/snapshot';
 
-import {
-  extendResource,
-  withPreviousValueOnLoading,
-} from '@ngrx/signals/resource';
+import { withPreviousValueOnLoading } from '@ngrx/signals/resource';
 
 describe('withResource', () => {
   describe('standard tests', () => {
@@ -1302,16 +1299,16 @@ describe('withResource', () => {
         const stuff = signal(0);
         const Store = signalStore(
           { providedIn: 'root' },
-          withResource(() => ({
-            id: extendResource(
-              rxResource({
+          withResource(
+            () => ({
+              id: rxResource({
                 params: () => stuff(),
                 stream: ({ params }) => of(params).pipe(delay(2)),
                 defaultValue: 0,
               }),
-              withPreviousValueOnLoading(),
-            ),
-          })),
+            }),
+            { extension: withPreviousValueOnLoading() },
+          ),
         );
         const store = TestBed.inject(Store);
         const value = store.idValue;
@@ -1323,8 +1320,7 @@ describe('withResource', () => {
         expect(store.idIsLoading()).toBe(false);
         expect(value()).toBe(1);
 
-        // TODO - on extensions branch, comment this in
-        // type _T1 = Assert<IsEqual<typeof store.idValue, Signal<number>>>;
+        type _T1 = Assert<IsEqual<typeof store.idValue, Signal<number>>>;
       });
     });
     // describe('withValueOnLoading', () => {
